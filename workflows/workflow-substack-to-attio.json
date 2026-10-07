@@ -120,12 +120,12 @@
       ],
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Runs once per contact. Input = Attio's response to the upsert (PUT assert).\n// PATCH on Attio *appends* multi-select values, so adding the source tag never\n// removes tags from other sources.\nconst rec = $input.item.json.data;\nconst src = $('Parse subscriber email (Substack template)').item.json;\nconst v = rec.values || {};\n\nconst values = { ...(src.extra_values || {}) };\n\nconst existingSources = (v.source || []).map(s => s.option && s.option.title);\nif (!existingSources.includes(src.source)) values.source = [src.source];\n\nconst existingName = (v.name || [])[0];\nif (src.name && !(existingName && existingName.full_name)) values.name = [src.name];\n\nreturn {\n  json: {\n    record_id: rec.id.record_id,\n    email: src.email,\n    attio_patch_body: { data: { values } },\n  },\n};\n"
+        "jsCode": "// Runs once per contact. Input = Attio's response to the upsert (PUT assert).\nconst rec = $input.item.json.data;\nconst src = $('Parse subscriber email (Substack template)').item.json;\nconst v = rec.values || {};\n\nconst values = { ...(src.extra_values || {}) };\n\n// Source is first-touch: only set it when the person has no source yet, so the\n// channel they originally came from is never overwritten.\nconst hasSource = (v.source || []).some(s => s.option && s.option.title);\nif (!hasSource) values.source = src.source;\n\nconst existingName = (v.name || [])[0];\nif (src.name && !(existingName && existingName.full_name)) values.name = [src.name];\n\nreturn {\n  json: {\n    record_id: rec.id.record_id,\n    email: src.email,\n    attio_patch_body: { data: { values } },\n  },\n};\n"
       }
     },
     {
       "id": "26efd45d-e1b4-553f-a97a-7f23e349493c",
-      "name": "Attio: tag source / status",
+      "name": "Attio: set source / status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -223,14 +223,14 @@
       "main": [
         [
           {
-            "node": "Attio: tag source / status",
+            "node": "Attio: set source / status",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Attio: tag source / status": {
+    "Attio: set source / status": {
       "main": [
         [],
         [

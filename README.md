@@ -29,7 +29,7 @@ A self-hosted [n8n](https://n8n.io) instance on Oracle Cloud that keeps **Attio 
 ## What each workflow does (plain language)
 
 ### 1. Kit → Attio (new subscribers) · `workflow-convertkit-to-attio.json`
-When someone subscribes or confirms in Kit, Kit notifies n8n right away. n8n then finds that person in Attio by email address, or creates them. It tags them **source = ConvertKit** and sets **email_status = Subscribed**. It never overwrites a name the team has already entered in Attio. It only fills in a name when Attio doesn't have one.
+When someone subscribes or confirms in Kit, Kit notifies n8n right away. n8n then finds that person in Attio by email address, or creates them. If they have no source yet, it sets **source = ConvertKit**. It also sets **email_status = Subscribed**. It never overwrites a name the team has already entered in Attio. It only fills in a name when Attio doesn't have one.
 
 ### 2. Attio → Kit (Send Outbound) · `workflow-attio-to-convertkit.json`
 Every 15 minutes, n8n asks Attio for people whose **outbound_status** is "Send Outbound" and who haven't been sent to Kit yet. For each person it:
@@ -42,7 +42,7 @@ If one person fails (for example, Kit rejects the address), the others still go 
 To send someone outbound, set their outbound_status to "Send Outbound" in Attio and wait up to 15 minutes.
 
 ### 3. Substack → Attio · `workflow-substack-to-attio.json`
-Substack has no API, so this works around it. Substack emails a "new subscriber" notification, and a Gmail filter puts it under the label `substack-subscribers`. Every 5 minutes n8n checks that label, pulls the subscriber's email address out of the notification, and adds or updates them in Attio with **source = Sparx Signal**.
+Substack has no API, so this works around it. Substack emails a "new subscriber" notification, and a Gmail filter puts it under the label `substack-subscribers`. Every 5 minutes n8n checks that label, pulls the subscriber's email address out of the notification, and adds or updates them in Attio. If they have no source yet, it sets **source = Sparx Signal**.
 
 ### 4. Kit unsubscribes/bounces → Attio · `workflow-convertkit-unsubscribe-to-attio.json`
 When someone unsubscribes, bounces or marks a Kit email as spam, Kit notifies n8n. n8n sets that person's **email_status** in Attio to Unsubscribed, Bounced or Complained, so the team can see it.
@@ -58,7 +58,7 @@ These custom attributes don't exist in the Attio workspace yet. Create them unde
 
 | Title | API slug | Type | Options |
 |---|---|---|---|
-| Source | `source` | Select, **allow multiple values** | `ConvertKit`, `Sparx Signal` |
+| Source | `source` | Select | `ConvertKit`, `Sparx Signal` |
 | Outbound status | `outbound_status` | Select | `Send Outbound` (add any others you like) |
 | Synced to ConvertKit | `synced_to_convertkit` | Checkbox | n/a |
 | Email status | `email_status` | Select | `Subscribed`, `Unsubscribed`, `Bounced`, `Complained` |
@@ -136,9 +136,9 @@ It registers four webhooks: activate, unsubscribe, bounce and complain. Each URL
 Kit can't sign its webhooks or send a password. Instead, each webhook URL carries a long random `?token=` that matches `WEBHOOK_SHARED_SECRET`. Any request without the right token is rejected and shows up as a red "Rejected Kit webhook" execution. If you change the secret, re-run `register-kit-webhooks.sh`, and delete the old webhooks in Kit with `GET`/`DELETE https://api.kit.com/v4/webhooks`.
 
 ## How the Attio upsert works
-Attio's "assert" endpoint creates or updates a person in one call: `PUT /v2/objects/people/records?matching_attribute=email_addresses`. When the matching attribute has multiple values (like email addresses), Attio *adds* the address and keeps the person's other emails. However, any **other** multi-value field sent in that same call gets *replaced*. That would wipe tags such as an existing "Sparx Signal" source. So the workflows do two steps:
+Attio's "assert" endpoint creates or updates a person in one call: `PUT /v2/objects/people/records?matching_attribute=email_addresses`. When the matching attribute has multiple values (like email addresses), Attio *adds* the address and keeps the person's other emails. The workflows still keep that call minimal, so it can't overwrite anything the team maintains. They do two steps:
 1. Assert with **only** the email address.
-2. `PATCH` the record, which **appends** to multi-value fields, to add the source tag and status. The name is only set if Attio has no name.
+2. `PATCH` the record to set the status, plus the source and name only if Attio has none yet.
 
 ---
 
@@ -147,7 +147,7 @@ Attio's "assert" endpoint creates or updates a person in one call: `PUT /v2/obje
 - **No Attio → Substack sync is possible.** Substack has no way to add subscribers from outside.
 - **Attio → Kit lags up to 15 minutes.** Attio's webhooks can't trigger on "field equals X and another field is unchecked", so the workflow checks Attio every 15 minutes instead. This is a deliberate tradeoff, not a bug. Each run handles up to 100 people, and the rest go on the next run.
 - **Substack notifications give us only an email address**, not a name.
-- **source means "every system they came through"**, not "first touch". A person enrolled from Attio into Kit triggers Kit's "subscriber activated" webhook, so they also get the ConvertKit tag.
+- **Source is first touch.** It records the channel a person first arrived through and is never overwritten. Someone who joins Kit and later subscribes to Sparx Signal stays `ConvertKit`. People the team adds to Attio by hand keep an empty source, unless you fill it in.
 - **Kit subscribers created by Workflow 2 are added as active**, with no double opt-in. Only mark people "Send Outbound" if you have a legitimate basis to email them, and keep the unsubscribe link in every sequence email.
 - Execution history is kept for **30 days**. That's our only log by design. There's no separate monitoring dashboard.
 
