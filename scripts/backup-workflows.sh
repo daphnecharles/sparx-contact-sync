@@ -2,7 +2,7 @@
 # Exports every n8n workflow as JSON into ./backups/<date>/ on the VM.
 #   ./scripts/backup-workflows.sh
 # Then copy that folder to the shared "Sparx Labs / Automation Backups" Drive
-# folder (or commit it to the private company GitHub repo).
+# folder (or a PRIVATE company GitHub repo — never this public one).
 #
 # Credentials are NOT exported (they contain live API keys). After a restore,
 # re-enter them in n8n → Credentials; see README → "Backups".

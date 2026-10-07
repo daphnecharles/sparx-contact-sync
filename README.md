@@ -13,7 +13,6 @@ A self-hosted [n8n](https://n8n.io) instance on Oracle Cloud that keeps **Attio 
  Substack ──► notification email ──► Gmail label ──► n8n parses it ──►  Attio
 ```
 
-This folder is self-contained. You can move it into its own repository without changing anything.
 
 | File | What it is |
 |---|---|
@@ -71,7 +70,7 @@ Option titles must also match exactly. If one doesn't, Attio rejects the write a
 2. 🖐 **DNS:** create an A record, e.g. `automate.sparxlabs.io`, pointing to the VM's public IP. Wait until `dig +short automate.sparxlabs.io` returns that IP.
 3. On the VM:
    ```bash
-   git clone <this repo> && cd <repo>/contact-sync
+   git clone https://github.com/daphnecharles/sparx-contact-sync && cd sparx-contact-sync
    bash scripts/bootstrap-vm.sh        # installs Docker and opens ports 80/443 in the VM's firewall
    # log out and back in
    cp .env.example .env && chmod 600 .env
@@ -152,7 +151,7 @@ Attio's "assert" endpoint creates or updates a person in one call: `PUT /v2/obje
 2. **The `.env` file, especially `N8N_ENCRYPTION_KEY`.** Store it in the team password manager. Without that key, a restored n8n can't decrypt its credentials.
 3. Credentials are deliberately **not** exported because they contain live API keys. After a restore, re-enter them using the Step 2 table.
 
-**Where to store them:** copy the `backups/<date>` folder into the shared Google Drive folder **"Sparx Labs / Automation Backups"**, or commit it to the private company GitHub repo under `contact-sync/backups/`. To do that, remove `backups/` from `contact-sync/.gitignore` first. Do this after every workflow change, and at least monthly.
+**Where to store them:** copy the `backups/<date>` folder into the shared Google Drive folder **"Sparx Labs / Automation Backups"**, or commit it to a **private** company GitHub repo. **Don't commit backups to this repo — it's public.** The exports contain no API keys, but they do contain your field names, sequence setup and webhook paths. Do this after every workflow change, and at least monthly.
 
 You can also export one workflow by hand: open it, then **⋯ → Download**.
 
