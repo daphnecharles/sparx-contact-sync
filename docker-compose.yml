@@ -3,7 +3,7 @@
 #   cp .env.example .env   # then fill in every value
 #   docker compose up -d
 #
-# Both images are multi-arch and run natively on Oracle's Ampere (arm64) shapes.
+# Both images are multi-arch: they run on Oracle AMD (x86) and Ampere (arm64) shapes.
 
 services:
   caddy:

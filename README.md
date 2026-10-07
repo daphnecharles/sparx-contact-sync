@@ -67,17 +67,23 @@ Option titles must also match exactly. If one doesn't, Attio rejects the write a
 
 ### Step 1. VM and network (manual console steps are marked 🖐)
 1. 🖐 **Oracle Cloud console:** open the VM's subnet **security list** and add ingress rules for TCP 80, TCP 443 and UDP 443 from `0.0.0.0/0`.
-2. 🖐 **DNS:** create an A record, e.g. `automate.sparxlabs.io`, pointing to the VM's public IP. Wait until `dig +short automate.sparxlabs.io` returns that IP.
-3. On the VM:
+2. 🖐 **DNS:** create an A record, e.g. `automate.sparxlabs.io`, pointing to the VM's public IP.
+3. On the VM, with Docker already installed (otherwise run `bash scripts/bootstrap-vm.sh` first):
    ```bash
-   git clone https://github.com/daphnecharles/sparx-contact-sync && cd sparx-contact-sync
-   bash scripts/bootstrap-vm.sh        # installs Docker and opens ports 80/443 in the VM's firewall
-   # log out and back in
-   cp .env.example .env && chmod 600 .env
-   nano .env                            # fill in every YOUR_* value (the comments explain how to generate each one)
-   docker compose up -d
-   docker compose logs -f caddy         # wait for "certificate obtained successfully"
+   git clone https://github.com/daphnecharles/sparx-contact-sync ~/n8n-stack
+   cd ~/n8n-stack
+   bash scripts/setup-server.sh automate.sparxlabs.io you@yourcompany.com
    ```
+   The script is safe to re-run. It:
+   - adds a 2 GB swap file if there is none,
+   - opens ports 80/443 in the VM's firewall,
+   - writes `.env` with freshly generated secrets and **prints the browser login password once** (save it in the password manager, along with `.env` itself),
+   - stops if DNS doesn't point at the VM yet,
+   - launches the stack and waits for the HTTPS certificate.
+
+   Later, fill in `KIT_SEQUENCE_ID` and `SUBSTACK_PUBLISHER_EMAILS` in `.env`, then run `docker compose up -d`.
+
+> **Small VMs:** the free `VM.Standard.E2.1.Micro` shape (1 GB RAM) runs this stack, but only with swap, which is why the script adds it. If the editor feels sluggish, the free Ampere A1.Flex shape (up to 4 cores and 24 GB RAM) is the comfortable option. Both images are multi-arch.
 
 **✅ Manual acceptance check:** open `https://YOUR_DOMAIN`. The browser should show a valid padlock and ask for the basic-auth username and password. After that, the n8n setup screen appears. The first time, it asks you to create the **owner account**. Use a team-owned email and store the password in the password manager.
 
