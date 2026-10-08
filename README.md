@@ -176,6 +176,7 @@ Start here: n8n → **Overview → Executions**, filter by **Failed**, and open 
 | Kit events not reaching n8n | Webhooks not registered, or the token changed | List them with `curl https://api.kit.com/v4/webhooks -H "X-Kit-Api-Key: …"` and re-run the register script |
 | Red "Rejected Kit webhook" executions | A request arrived without the right token. This is either a stale webhook in Kit or a random scanner | Clean up old webhooks in Kit. Scanner requests can be ignored |
 | Site won't load or shows a certificate error | DNS doesn't point at the VM yet, or ports 80/443 are blocked | Run `docker compose logs caddy`, check the Oracle security list and the VM firewall (`sudo iptables -L INPUT -n`) |
+| Kit emails "Your webhook has failed N times and it has been disabled", often right after a big Kit import | Too many webhooks arrived at once and n8n's database timed out (`LockAcquireTimeoutError` in `docker compose logs n8n`) | Check `N8N_CONCURRENCY_PRODUCTION_LIMIT` is set and each workflow's *Settings → Save execution progress* is off. Re-register the disabled webhook (see `scripts/register-kit-webhooks.sh`), then backfill anyone missed from a Kit export |
 | Workflow 2 fails every run for the same person | Kit permanently rejects that address | Fix the email in Attio, or clear their "Send Outbound" status |
 
 Upgrading n8n: change the image tag in `docker-compose.yml`, back up first, then run `docker compose pull && docker compose up -d`.

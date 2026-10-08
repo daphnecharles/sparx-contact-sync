@@ -248,7 +248,7 @@
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
     "saveManualExecutions": true,
-    "saveExecutionProgress": true
+    "saveExecutionProgress": false
   },
   "pinData": {},
   "active": false,

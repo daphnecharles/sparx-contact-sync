@@ -52,6 +52,12 @@ services:
       GENERIC_TIMEZONE: ${TIMEZONE:-America/New_York}
       TZ: ${TIMEZONE:-America/New_York}
 
+      # --- Burst protection ---
+      # Kit can fire hundreds of webhooks at once (e.g. after a CSV import). n8n's
+      # SQLite database allows one writer at a time, so run at most 5 executions
+      # concurrently and queue the rest instead of timing out.
+      N8N_CONCURRENCY_PRODUCTION_LIMIT: "5"
+
       # --- Execution history (our "logging system") ---
       EXECUTIONS_DATA_SAVE_ON_ERROR: all
       EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
