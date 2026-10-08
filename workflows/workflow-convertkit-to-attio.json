@@ -84,7 +84,7 @@
         280
       ],
       "parameters": {
-        "jsCode": "// Kit webhook payload: { subscriber: { id, first_name, email_address, state, fields: {...} } }\nreturn $input.all().map(item => {\n  const body = item.json.body || {};\n  const sub = body.subscriber || {};\n  const email = String(sub.email_address || '').trim().toLowerCase();\n  if (!email) {\n    throw new Error('Kit payload had no subscriber.email_address: ' + JSON.stringify(body));\n  }\n\n  const fields = sub.fields || {};\n  const first = String(sub.first_name || fields.first_name || '').trim();\n  const last = String(fields.last_name || '').trim();\n  const name = (first || last)\n    ? { first_name: first, last_name: last, full_name: [first, last].filter(Boolean).join(' ') }\n    : null;\n\n  return {\n    json: {\n      email,\n      name,\n      source: 'ConvertKit',\n      // A (re)activation means they are subscribed again.\n      extra_values: { email_status: 'Subscribed' },\n      // Only the email goes in the upsert; everything else is set afterwards so we\n      // never overwrite data the team maintains in Attio.\n      attio_assert_body: { data: { values: { email_addresses: [email] } } },\n      raw_payload: body,\n    },\n  };\n});\n"
+        "jsCode": "const VALID_EMAIL = /^[^@\\s,;]+@[^@\\s,;]+\\.[A-Za-z]{2,24}$/;\n// Kit webhook payload: { subscriber: { id, first_name, email_address, state, fields: {...} } }\nreturn $input.all().map(item => {\n  const body = item.json.body || {};\n  const sub = body.subscriber || {};\n  const email = String(sub.email_address || '').trim().toLowerCase();\n  if (!VALID_EMAIL.test(email)) {\n    // Typos like \"name@gmail.comh\" exist in Kit; Attio rejects them, so skip quietly.\n    console.log('Skipping Kit subscriber with an invalid email address:', email);\n    return null;\n  }\n\n  const fields = sub.fields || {};\n  const first = String(sub.first_name || fields.first_name || '').trim();\n  const last = String(fields.last_name || '').trim();\n  const name = (first || last)\n    ? { first_name: first, last_name: last, full_name: [first, last].filter(Boolean).join(' ') }\n    : null;\n\n  return {\n    json: {\n      email,\n      name,\n      source: 'ConvertKit',\n      // A (re)activation means they are subscribed again.\n      extra_values: { email_status: 'Subscribed' },\n      // Only the email goes in the upsert; everything else is set afterwards so we\n      // never overwrite data the team maintains in Attio.\n      attio_assert_body: { data: { values: { email_addresses: [email] } } },\n      raw_payload: body,\n    },\n  };\n}).filter(Boolean);\n"
       }
     },
     {
@@ -176,12 +176,56 @@
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
       "position": [
+        1540,
+        500
+      ],
+      "parameters": {
+        "errorMessage": "=Kit \u2192 Attio \u2014 Attio call failed for {{ $('Map Kit subscriber').item.json.email }}. Attio error: {{ $json.error?.message ?? 'unknown error' }} | Original payload: {{ JSON.stringify($('Map Kit subscriber').item.json.raw_payload) }}"
+      }
+    },
+    {
+      "id": "7bd3ae8f-4767-58cf-b500-17d94d23e98c",
+      "name": "Attio rejected the email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
         1320,
         400
       ],
       "parameters": {
-        "errorMessage": "=Kit \u2192 Attio \u2014 Attio call failed for {{ $('Map Kit subscriber').item.json.email }}. Attio error: {{ JSON.stringify($json.error) }} | Original payload: {{ JSON.stringify($('Map Kit subscriber').item.json.raw_payload) }}"
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e95dd96f-792b-57a8-b2e7-dd1f5069d289",
+              "leftValue": "={{ $json.error?.message ?? '' }}",
+              "rightValue": "Invalid email address",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       }
+    },
+    {
+      "id": "5303217c-3132-5614-8038-1c995b7088c6",
+      "name": "Skip: invalid email",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -236,7 +280,7 @@
         ],
         [
           {
-            "node": "Log failed payload",
+            "node": "Attio rejected the email?",
             "type": "main",
             "index": 0
           }
@@ -257,6 +301,24 @@
     "Attio: set source / status": {
       "main": [
         [],
+        [
+          {
+            "node": "Attio rejected the email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attio rejected the email?": {
+      "main": [
+        [
+          {
+            "node": "Skip: invalid email",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Log failed payload",

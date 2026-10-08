@@ -84,7 +84,7 @@
         280
       ],
       "parameters": {
-        "jsCode": "// One webhook URL handles three Kit events; the registered URL carries\n// ?event=unsubscribe|bounce|complain so we know which one fired.\nconst BY_EVENT = { unsubscribe: 'Unsubscribed', bounce: 'Bounced', complain: 'Complained' };\nconst BY_STATE = { cancelled: 'Unsubscribed', bounced: 'Bounced', complained: 'Complained' };\n\nreturn $input.all().map(item => {\n  const body = item.json.body || {};\n  const sub = body.subscriber || {};\n  const email = String(sub.email_address || '').trim().toLowerCase();\n  if (!email) throw new Error('Kit payload had no subscriber.email_address: ' + JSON.stringify(body));\n\n  const event = String((item.json.query || {}).event || '').toLowerCase();\n  const status = BY_EVENT[event] || BY_STATE[String(sub.state || '').toLowerCase()];\n  if (!status) {\n    throw new Error(`Unknown Kit status event \"${event}\" / state \"${sub.state}\": ` + JSON.stringify(body));\n  }\n\n  return {\n    json: {\n      email,\n      email_status: status,\n      // email_status is a single-select, so asserting it directly is safe.\n      attio_assert_body: { data: { values: { email_addresses: [email], email_status: status } } },\n      raw_payload: body,\n    },\n  };\n});\n"
+        "jsCode": "const VALID_EMAIL = /^[^@\\s,;]+@[^@\\s,;]+\\.[A-Za-z]{2,24}$/;\n// One webhook URL handles three Kit events; the registered URL carries\n// ?event=unsubscribe|bounce|complain so we know which one fired.\nconst BY_EVENT = { unsubscribe: 'Unsubscribed', bounce: 'Bounced', complain: 'Complained' };\nconst BY_STATE = { cancelled: 'Unsubscribed', bounced: 'Bounced', complained: 'Complained' };\n\nreturn $input.all().map(item => {\n  const body = item.json.body || {};\n  const sub = body.subscriber || {};\n  const email = String(sub.email_address || '').trim().toLowerCase();\n  if (!VALID_EMAIL.test(email)) {\n    // Typos like \"name@gmail.comh\" exist in Kit; Attio rejects them, so skip quietly.\n    console.log('Skipping Kit subscriber with an invalid email address:', email);\n    return null;\n  }\n\n  const event = String((item.json.query || {}).event || '').toLowerCase();\n  const status = BY_EVENT[event] || BY_STATE[String(sub.state || '').toLowerCase()];\n  if (!status) {\n    throw new Error(`Unknown Kit status event \"${event}\" / state \"${sub.state}\": ` + JSON.stringify(body));\n  }\n\n  return {\n    json: {\n      email,\n      email_status: status,\n      // email_status is a single-select, so asserting it directly is safe.\n      attio_assert_body: { data: { values: { email_addresses: [email], email_status: status } } },\n      raw_payload: body,\n    },\n  };\n}).filter(Boolean);\n"
       }
     },
     {
@@ -132,12 +132,56 @@
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
       "position": [
+        1100,
+        520
+      ],
+      "parameters": {
+        "errorMessage": "=Kit status \u2192 Attio \u2014 Attio call failed for {{ $('Map status change').item.json.email }} ({{ $('Map status change').item.json.email_status }}). Attio error: {{ $json.error?.message ?? 'unknown error' }} | Original payload: {{ JSON.stringify($('Map status change').item.json.raw_payload) }}"
+      }
+    },
+    {
+      "id": "d3273ebf-810b-59cf-88be-197f9108b6f2",
+      "name": "Attio rejected the email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
         880,
         420
       ],
       "parameters": {
-        "errorMessage": "=Kit status \u2192 Attio \u2014 Attio call failed for {{ $('Map status change').item.json.email }} ({{ $('Map status change').item.json.email_status }}). Attio error: {{ JSON.stringify($json.error) }} | Original payload: {{ JSON.stringify($('Map status change').item.json.raw_payload) }}"
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "39513c05-4c3a-5ba1-9446-8ccd1a58a0b0",
+              "leftValue": "={{ $json.error?.message ?? '' }}",
+              "rightValue": "Invalid email address",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       }
+    },
+    {
+      "id": "d66e6e52-886f-5dd3-acce-b82ff9c8283e",
+      "name": "Skip: invalid email",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        320
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -184,6 +228,24 @@
     "Attio: set email_status": {
       "main": [
         [],
+        [
+          {
+            "node": "Attio rejected the email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attio rejected the email?": {
+      "main": [
+        [
+          {
+            "node": "Skip: invalid email",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Log failed payload",

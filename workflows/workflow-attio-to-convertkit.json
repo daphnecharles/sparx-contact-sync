@@ -229,7 +229,7 @@
             {
               "id": "2781b9ef-30ff-5d21-84e4-07cc581b05ce",
               "name": "error",
-              "value": "={{ $json.error?.message || JSON.stringify($json.error) }}",
+              "value": "={{ $json.error?.message ?? 'unknown error' }}",
               "type": "string"
             }
           ]

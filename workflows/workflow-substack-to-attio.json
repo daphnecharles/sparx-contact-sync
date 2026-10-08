@@ -159,12 +159,56 @@
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
       "position": [
+        1540,
+        520
+      ],
+      "parameters": {
+        "errorMessage": "=Substack \u2192 Attio \u2014 Attio call failed for {{ $('Parse subscriber email (Substack template)').item.json.email }}. Attio error: {{ $json.error?.message ?? 'unknown error' }} | Original payload: {{ JSON.stringify($('Parse subscriber email (Substack template)').item.json.raw_payload) }}"
+      }
+    },
+    {
+      "id": "0522ac28-4986-505a-bc7c-248479a5aeeb",
+      "name": "Attio rejected the email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
         1320,
         420
       ],
       "parameters": {
-        "errorMessage": "=Substack \u2192 Attio \u2014 Attio call failed for {{ $('Parse subscriber email (Substack template)').item.json.email }}. Attio error: {{ JSON.stringify($json.error) }} | Original payload: {{ JSON.stringify($('Parse subscriber email (Substack template)').item.json.raw_payload) }}"
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f8138347-2329-55ae-913d-5c6e48388a18",
+              "leftValue": "={{ $json.error?.message ?? '' }}",
+              "rightValue": "Invalid email address",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       }
+    },
+    {
+      "id": "4bc7f204-9442-525c-bd78-7b33a62f41e4",
+      "name": "Skip: invalid email",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -212,7 +256,7 @@
         ],
         [
           {
-            "node": "Log failed payload",
+            "node": "Attio rejected the email?",
             "type": "main",
             "index": 0
           }
@@ -233,6 +277,24 @@
     "Attio: set source / status": {
       "main": [
         [],
+        [
+          {
+            "node": "Attio rejected the email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attio rejected the email?": {
+      "main": [
+        [
+          {
+            "node": "Skip: invalid email",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Log failed payload",
