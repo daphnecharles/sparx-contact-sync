@@ -8,7 +8,7 @@ A self-hosted [n8n](https://n8n.io) instance on Oracle Cloud that keeps **Attio 
 
 ```
              new subscriber (webhook)                 "Send Outbound" (poll, 15 min)
-   Kit  ───────────────────────────────►  Attio  ─────────────────────────────────►  Kit sequence
+   Kit  ───────────────────────────────►  Attio  ─────────────────────────────────►  Kit subscriber
    Kit  ── unsubscribe / bounce / complaint ──►  Attio (email_status)
  Substack ──► notification email ──► Gmail label ──► n8n parses it ──►  Attio
 ```
@@ -31,15 +31,14 @@ A self-hosted [n8n](https://n8n.io) instance on Oracle Cloud that keeps **Attio 
 ### 1. Kit → Attio (new subscribers) · `workflow-convertkit-to-attio.json`
 When someone subscribes or confirms in Kit, Kit notifies n8n right away. n8n then finds that person in Attio by email address, or creates them. If they have no source yet, it sets **source = ConvertKit**. It also sets **email_status = Subscribed**. It never overwrites a name the team has already entered in Attio. It only fills in a name when Attio doesn't have one.
 
-### 2. Attio → Kit (Send Outbound) · `workflow-attio-to-convertkit.json`
+### 2. Attio → Kit (add subscriber) · `workflow-attio-to-convertkit.json`
 Every 15 minutes, n8n asks Attio for people whose **outbound_status** is "Send Outbound" and who haven't been sent to Kit yet. For each person it:
-1. adds them to Kit,
-2. enrolls them in the outbound sequence,
-3. ticks **synced_to_convertkit** in Attio so they aren't sent again.
+1. adds them to Kit as an active subscriber. They are **not** added to any sequence or form.
+2. ticks **synced_to_convertkit** in Attio, so they're never added twice.
 
-If one person fails (for example, Kit rejects the address), the others still go through. The run shows as failed in n8n with that person's email and the reason, and they are retried on the next run.
+People whose **email_status** is Unsubscribed, Bounced or Complained are always skipped, even if flagged, so nobody who opted out is re-added. If Kit rejects someone, the others still go through. The run shows as failed with that person's email and the reason, and they're retried on the next run.
 
-To send someone outbound, set their outbound_status to "Send Outbound" in Attio and wait up to 15 minutes.
+**To add someone to Kit:** set their outbound_status to "Send Outbound" in Attio and wait up to 15 minutes. People are only added when flagged. Attio creates records automatically from synced email and calendars, and those shouldn't all receive marketing email.
 
 ### 3. Substack → Attio · `workflow-substack-to-attio.json`
 Substack has no API, so this works around it. Substack emails a "new subscriber" notification, and a Gmail filter puts it under the label `substack-subscribers`. Every 5 minutes n8n checks that label, pulls the subscriber's email address out of the notification, and adds or updates them in Attio. If they have no source yet, it sets **source = Sparx Signal**.
@@ -126,7 +125,7 @@ It registers four webhooks: activate, unsubscribe, bounce and complain. Each URL
 | Test | How | Expected |
 |---|---|---|
 | Kit → Attio | Subscribe a test address through a Kit form | Within seconds, the person appears in Attio with source ConvertKit and email_status Subscribed |
-| Attio → Kit | Set a test person's outbound_status to "Send Outbound" | Within 15 minutes, they're in the Kit sequence and synced_to_convertkit is ticked |
+| Attio → Kit | Set a test person's outbound_status to "Send Outbound" | Within 15 minutes, they're a Kit subscriber (no sequence) and synced_to_convertkit is ticked |
 | Unsubscribe | Unsubscribe that test address from a Kit email | email_status becomes Unsubscribed |
 | **Substack → Attio** | Subscribe a test address to Sparx Signal | Within about 5–10 minutes, the person appears in Attio with source Sparx Signal. Open the execution in n8n and check the *Parse subscriber email* node output: `all_candidates` should contain only the test address |
 
@@ -148,7 +147,7 @@ Attio's "assert" endpoint creates or updates a person in one call: `PUT /v2/obje
 - **Attio → Kit lags up to 15 minutes.** Attio's webhooks can't trigger on "field equals X and another field is unchecked", so the workflow checks Attio every 15 minutes instead. This is a deliberate tradeoff, not a bug. Each run handles up to 100 people, and the rest go on the next run.
 - **Substack notifications give us only an email address**, not a name.
 - **Source is first touch.** It records the channel a person first arrived through and is never overwritten. Someone who joins Kit and later subscribes to Sparx Signal stays `ConvertKit`. People the team adds to Attio by hand keep an empty source, unless you fill it in.
-- **Kit subscribers created by Workflow 2 are added as active**, with no double opt-in. Only mark people "Send Outbound" if you have a legitimate basis to email them, and keep the unsubscribe link in every sequence email.
+- **Kit subscribers created by Workflow 2 are added as active**, with no double opt-in. Only mark people "Send Outbound" if you have a legitimate basis to email them.
 - Execution history is kept for **30 days**. That's our only log by design. There's no separate monitoring dashboard.
 
 ## Backups
@@ -187,7 +186,7 @@ Upgrading n8n: change the image tag in `docker-compose.yml`, back up first, then
 - [ ] Oracle Cloud: VM provisioned (Ampere A1.Flex, Ubuntu 24.04), SSH working, **security list opened for 80/443**
 - [ ] DNS A record for the chosen subdomain → VM public IP (replaces `YOUR_DOMAIN`)
 - [ ] Attio: create the four People attributes in Step 0, and create an API token (`YOUR_ATTIO_API_KEY`)
-- [ ] Kit: v4 API key (`YOUR_KIT_V4_API_KEY`) and the outbound **sequence ID** (`YOUR_KIT_SEQUENCE_ID`)
+- [ ] Kit: v4 API key (`YOUR_KIT_V4_API_KEY`)
 - [ ] Gmail: confirm the inbox and label (default `substack-subscribers`) that catch Substack's "new subscriber" emails, and list the publisher/inbox addresses for `SUBSTACK_PUBLISHER_EMAILS`
 - [ ] Google Cloud: OAuth client and consent screen, then **Sign in with Google** in n8n
 - [ ] Generate `N8N_ENCRYPTION_KEY`, `WEBHOOK_SHARED_SECRET` and the basic-auth hash, and store them in the password manager

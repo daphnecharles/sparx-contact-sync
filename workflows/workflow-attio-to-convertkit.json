@@ -1,5 +1,5 @@
 {
-  "name": "Sparx | Attio \u2192 Kit (Send Outbound)",
+  "name": "Sparx | Attio \u2192 Kit (add subscriber)",
   "nodes": [
     {
       "id": "ed976571-a4f1-5c7f-8525-00088c4f5805",
@@ -37,7 +37,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{\n  \"filter\": {\n    \"$and\": [\n      {\n        \"outbound_status\": \"Send Outbound\"\n      },\n      {\n        \"synced_to_convertkit\": false\n      }\n    ]\n  },\n  \"limit\": 100\n}",
+        "jsonBody": "{\n  \"filter\": {\n    \"$and\": [\n      {\n        \"outbound_status\": \"Send Outbound\"\n      },\n      {\n        \"synced_to_convertkit\": false\n      }\n    ]\n  },\n  \"limit\": 500\n}",
         "options": {}
       },
       "credentials": {
@@ -60,7 +60,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "// Flattens Attio's query response into one item per contact.\n// Attio returns every attribute as an array of value objects.\nconst out = [];\nfor (const item of $input.all()) {\n  for (const rec of item.json.data || []) {\n    const v = rec.values || {};\n    // Belt and braces: never re-send someone already marked as synced.\n    if ((v.synced_to_convertkit || [])[0]?.value === true) continue;\n\n    const email = (v.email_addresses || [])[0]?.email_address;\n    if (!email) {\n      console.log('Skipping Attio record with no email:', rec.id.record_id);\n      continue;\n    }\n    const name = (v.name || [])[0] || {};\n    out.push({\n      json: {\n        record_id: rec.id.record_id,\n        email: email.trim().toLowerCase(),\n        first_name: name.first_name || '',\n      },\n    });\n  }\n}\n// Returning nothing ends the run quietly when there is no one to send.\nreturn out;\n"
+        "jsCode": "// Flattens Attio's query response into one item per contact.\n// Attio returns every attribute as an array of value objects.\nconst out = [];\nfor (const item of $input.all()) {\n  for (const rec of item.json.data || []) {\n    const v = rec.values || {};\n    // Belt and braces: never re-send someone already marked as synced.\n    if ((v.synced_to_convertkit || [])[0]?.value === true) continue;\n\n    // Never (re)subscribe someone who unsubscribed, bounced or complained.\n    const status = (v.email_status || [])[0]?.option?.title;\n    if (['Unsubscribed', 'Bounced', 'Complained'].includes(status)) {\n      console.log(`Skipping ${rec.id.record_id}: email_status is ${status}`);\n      continue;\n    }\n\n    const email = (v.email_addresses || [])[0]?.email_address;\n    if (!email) {\n      console.log('Skipping Attio record with no email:', rec.id.record_id);\n      continue;\n    }\n    const name = (v.name || [])[0] || {};\n    out.push({\n      json: {\n        record_id: rec.id.record_id,\n        email: email.trim().toLowerCase(),\n        first_name: name.first_name || '',\n      },\n    });\n  }\n}\n// Returning nothing ends the run quietly when there is no one to send.\nreturn out;\n"
       }
     },
     {
@@ -108,42 +108,12 @@
       "onError": "continueErrorOutput"
     },
     {
-      "id": "6298b10d-7f29-5733-a167-ba53298fda3b",
-      "name": "Kit: add to outbound sequence",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1120,
-        400
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "=https://api.kit.com/v4/sequences/{{ $env.KIT_SEQUENCE_ID }}/subscribers",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ email_address: $('Loop over contacts').item.json.email }) }}",
-        "options": {}
-      },
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "sparxKitApi",
-          "name": "Kit API"
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000,
-      "onError": "continueErrorOutput"
-    },
-    {
       "id": "5a9000ce-a690-5ed9-b47e-db9b87122703",
       "name": "Attio: mark synced_to_convertkit",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1340,
+        1120,
         400
       ],
       "parameters": {
@@ -304,24 +274,6 @@
       ]
     },
     "Kit: create/update subscriber": {
-      "main": [
-        [
-          {
-            "node": "Kit: add to outbound sequence",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Mark failed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Kit: add to outbound sequence": {
       "main": [
         [
           {
